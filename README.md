@@ -57,50 +57,119 @@ ENTER
 
 ## 📌 Available Commands
 
-### System Control
+### 🔧 System Control
+* `/help` → Displays all available commands
+* `/pcname` → Shows the computer name
+* `/ip` → Shows local and public IP addresses
+* `/lock` → Locks the workstation
+* `/restart` → Restarts the computer (requires confirmation)
+* `/shutdown` → Shuts down the computer (requires confirmation)
+* `/notepad` → Opens Notepad
+* `/visit <url>` → Opens a URL in the default browser
+* `/sysinfo` → Displays detailed system information (CPU, RAM, OS, disk)
+* `/screenshot` → Takes a screenshot and sends it to chat
 
-* `/lock` → Locks the workstation.
-* `/restart` → Restarts the computer.
-* `/shutdown` → Shuts down the computer.
-* `/notepad` → Opens Notepad.
-* `/pcname` → Shows the computer name.
-* `/ip` → Shows local and public IP addresses.
-* `/screenshot` → Takes a screenshot and sends it to the chat.
-* `/sendfile <path>` → Sends a file from the local disk.
-* `/sendfolder <path>` → Sends a zipped folder.
-* `/visit <url>` → Opens a URL in the default browser.
-* `/screenshot`  →  Sends a screenshot.
+### 📁 File Operations
+* `/getfile <path>` → Send a file from local disk
+* `/getfolder <path>` → Send a zipped folder from local disk
+* `/delete <path>` → Delete a file or folder
+* `/rename <old> <new>` → Rename or move a file or folder
 
-### Navigation and File Operations
+### 🗂️ File System Navigation
+* `cd <path>` → Change directory
+* `cd` → Show current directory
+* `ls` or `dir` → List files and folders in current directory
 
-* `cd <path>` → Change directory.
-* `cd` → Show current directory.
-* `ls` or `dir` → List files/folders in current directory.
-* `/delete <path>` → Delete a file or folder.
-* `/rename <old> <new>` → Rename or move a file/folder.
+### 📊 Monitoring & Process Control
+* `/processes` → List top 20 running processes by CPU usage
+* `/kill <pid>` → Terminate a process by PID
+* `/tasklist` → Display top 25 processes by memory usage
+* `/taskkill <name>` → Kill all processes by name
+* `/services` → List running Windows services
 
-### Monitoring & Processes
+### 📋 Clipboard & WiFi
+* `/getclipboard` → Gets clipboard history (appends current clipboard and returns log)
+* `/clearclipboard` → Clears stored clipboard history file
+* `/setclipboard <text>` → Sets text to clipboard
+* `/wifi` → Shows all saved WiFi networks and passwords
 
-* `/processes` → List running processes.
-* `/kill <pid>` → Kill process by PID.
-* `/tasklist` → Top 25 processes by memory usage.
-* `/taskkill <name>` → Kill processes by name.
-* `/services` → List running services.
+### 💻 Command Execution
+* `/cmd <command>` → Execute CMD command
+* `/powershell <command>` → Execute PowerShell command
 
-### Clipboard & System Info
-
-* `/getclipboard` → Get text from clipboard.
-* `/setclipboard <text>` → Set text to clipboard.
-* `/sysinfo` → System details (CPU, RAM, OS, disk).
-* `/wifi` → List saved WiFi networks + passwords.
-
-### Other
-
-* `/help` → Shows all commands.
-* `/selfdestruct` → Removes persistence and deletes the script.
-* `/cmd <command>` → Run CMD command.
-* `/powershell <command>` → Run PowerShell command.
+### 🔄 Maintenance
+* `/update <url>` → Updates the script from a URL and restarts the system
+* `/selfdestruct` → Removes all traces of the script and terminates (requires confirmation)
 
 ---
+
+## ✨ Features
+
+### 🔄 Automatic Features
+- **Persistence:** Automatically sets up startup persistence via VBS launcher
+- **Network Monitoring:** Detects when the PC goes online and sends a notification
+- **Resume Detection:** Sends a message when the system resumes from sleep
+- **Hidden Execution:** Runs completely hidden with no visible windows
+- **Startup Command Filtering:** Skips old/pending Telegram commands on startup
+
+### 🛡️ Reliability Features
+- **Network Resilience:** Automatically waits for network connectivity and reconnects
+- **Error Handling:** Robust error handling for all operations
+- **Path Flexibility:** Supports relative and absolute paths
+- **Drive Navigation:** Properly handles drive-only paths (C:, D:, etc.)
+- **UNC Path Support:** Can navigate to network/UNC paths
+
+### 📝 Command Features
+- **Confirmation Required:** Sensitive commands like restart, shutdown, and selfdestruct require confirmation
+- **Current Directory Tracking:** Maintains current directory across sessions
+- **Clipboard History:** Tracks clipboard changes with timestamps
+- **File Size Limits:** Handles large files appropriately
+- **Process Information:** Detailed process and service information
+
+---
+
+## 🔐 Security Notes
+
+> [!CAUTION]
+> - This script provides full system access to anyone with your bot token
+> - Keep your bot token and user ID private
+> - The script retrieves and can send sensitive information (WiFi passwords, files, clipboard content)
+> - Uses hidden execution to avoid detection
+> - Sets up automatic startup persistence
+
+### Removal
+
+To completely remove the script:
+1. Send `/selfdestruct` command to your bot
+2. Send `/confirm-selfdestruct` to confirm
+3. This will remove:
+   - The startup VBS launcher
+   - The hidden script copy
+   - The running script itself
+
+Alternatively, manually delete:
+- `%APPDATA%\Microsoft\Windows\prankware.ps1` (or your script name)
+- `%USERPROFILE%\AppData\Roaming\Microsoft\Windows\Start Menu\Programs\Startup\WindowsUpdateScheduler.vbs`
+
+---
+
+## 📝 Notes
+
+- The script runs completely hidden with no visible windows
+- Maintains connection even after sleep/hibernate
+- Automatically skips old commands on startup to prevent accidental execution
+- All file paths can be relative (to current directory) or absolute
+- Maximum message length is 4000 characters (longer output will be truncated)
+- Screenshot functionality captures the entire virtual screen (multi-monitor support)
+
+---
+
+## 🤝 Contributing
+
+Feel free to submit issues or pull requests to improve this project!
+
+## 📄 License
+
+This project is provided as-is for educational purposes only. Use responsibly and ethically.
 
 
