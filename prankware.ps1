@@ -138,11 +138,11 @@ public class DpiHelper {
 
         # Get all screens and calculate total bounds
         $screens = [System.Windows.Forms.Screen]::AllScreens
-        $left = ($screens | Measure-Object -Property {$_.Bounds.Left} -Minimum).Minimum
-        $top = ($screens | Measure-Object -Property {$_.Bounds.Top} -Minimum).Minimum
-        $right = ($screens | Measure-Object -Property {$_.Bounds.Right} -Maximum).Maximum
-        $bottom = ($screens | Measure-Object -Property {$_.Bounds.Bottom} -Maximum).Maximum
-        
+        $left = ($screens | ForEach-Object { $_.Bounds.Left } | Measure-Object -Minimum).Minimum
+        $top = ($screens | ForEach-Object { $_.Bounds.Top } | Measure-Object -Minimum).Minimum
+        $right = ($screens | ForEach-Object { $_.Bounds.Right } | Measure-Object -Maximum).Maximum
+        $bottom = ($screens | ForEach-Object { $_.Bounds.Bottom } | Measure-Object -Maximum).Maximum
+
         $width = $right - $left
         $height = $bottom - $top
 
