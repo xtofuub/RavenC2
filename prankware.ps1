@@ -121,20 +121,40 @@ function Send-Screenshot {
         Add-Type -AssemblyName System.Windows.Forms
         Add-Type -AssemblyName System.Drawing
 
-        # Use VirtualScreen, but guard against invalid sizes to avoid errors.
-        $screen = [System.Windows.Forms.SystemInformation]::VirtualScreen
-        $width  = [int]$screen.Width
-        $height = [int]$screen.Height
+        # Make the process DPI-aware to ensure accurate screen capture on high-DPI displays
+        Add-Type @"
+using System;
+using System.Runtime.InteropServices;
+public class DpiHelper {
+    [DllImport("user32.dll")]
+    public static extern bool SetProcessDPIAware();
+}
+"@
+        try {
+            [DpiHelper]::SetProcessDPIAware() | Out-Null
+        } catch {
+            # Silently continue if DPI awareness can't be set
+        }
+
+        # Get all screens and calculate total bounds
+        $screens = [System.Windows.Forms.Screen]::AllScreens
+        $left = ($screens | ForEach-Object { $_.Bounds.Left } | Measure-Object -Minimum).Minimum
+        $top = ($screens | ForEach-Object { $_.Bounds.Top } | Measure-Object -Minimum).Minimum
+        $right = ($screens | ForEach-Object { $_.Bounds.Right } | Measure-Object -Maximum).Maximum
+        $bottom = ($screens | ForEach-Object { $_.Bounds.Bottom } | Measure-Object -Maximum).Maximum
+
+        $width = $right - $left
+        $height = $bottom - $top
 
         if ($width -le 0 -or $height -le 0) {
-            throw "VirtualScreen returned invalid size: ${width}x${height}."
+            throw "Screen bounds returned invalid size: ${width}x${height}."
         }
 
         $bitmap   = New-Object System.Drawing.Bitmap $width, $height
         $graphics = [System.Drawing.Graphics]::FromImage($bitmap)
 
         $captureSize = New-Object System.Drawing.Size $width, $height
-        $graphics.CopyFromScreen($screen.Left, $screen.Top, 0, 0, $captureSize)
+        $graphics.CopyFromScreen($left, $top, 0, 0, $captureSize)
 
         $bitmap.Save($screenshotPath)
         $graphics.Dispose()
